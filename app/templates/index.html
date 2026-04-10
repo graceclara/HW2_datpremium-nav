@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DAT 指標：Premium to NAV（MSTR）</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <div class="topbar">
+        <div class="brand">
+          <h1>Premium to NAV（DAT 指標）</h1>
+          <div class="tag">以 Strategy / MSTR 為例（每日時間序列）</div>
+        </div>
+        <div class="pill"><strong class="mono">BTC</strong><span id="btcNow" class="mono">—</span></div>
+      </div>
+
+      <div class="panel" style="margin-bottom: 14px;">
+        <div class="controls">
+          <label>
+            股票代號（AlphaVantage）
+            <input id="symbol" value="MSTR" />
+          </label>
+          <label>
+            回溯天數
+            <input id="days" type="number" min="30" max="2000" value="{{ default_days }}" />
+          </label>
+          <label>
+            Shares outstanding（假設）
+            <input id="shares" type="number" value="{{ shares_outstanding }}" />
+          </label>
+          <button id="reload">載入/重算</button>
+          <div class="muted" style="font-size:12px;line-height:1.4;max-width:520px">
+            公式：Premium(%) = \(\left(\frac{\text{股價}}{\text{NAV per share}} - 1\right)\times 100\)，
+            NAV per share = \(\frac{\text{BTC holdings}\times \text{BTC price}}{\text{shares}}\)
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <canvas id="chart" height="120"></canvas>
+          <div class="footer">
+            <span class="muted">提示：</span>Premium 高代表「股票價格相對 BTC 淨值更貴」（市場給溢價）；Premium 低/負代表折價。
+          </div>
+        </div>
+        <div class="panel">
+          <div class="kpi">
+            <div class="row">
+              <div class="label">最新 Premium</div>
+              <div class="value mono" id="kLatest">—</div>
+            </div>
+            <div class="row">
+              <div class="label">30 天變化（pp）</div>
+              <div class="value mono" id="k30d">—</div>
+            </div>
+            <div class="row">
+              <div class="label">區間最小 / 最大</div>
+              <div class="value mono" id="kMinMax">—</div>
+            </div>
+            <div class="row">
+              <div class="label">資料期間</div>
+              <div class="value mono" id="kRange">—</div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="insights" id="insights">
+            <div class="muted">AI 摘要（先用規則版，可擴充成 LLM）：</div>
+            <ul>
+              <li>當 Premium 上升：市場可能把 MSTR 當作<strong>高 Beta BTC 代理</strong>，並為其融資/增持能力定價。</li>
+              <li>當 Premium 下滑或轉負：可能反映<strong>風險偏好下降</strong>、稀釋疑慮、或股票相對 BTC 轉弱。</li>
+              <li>Premium 往往與 BTC 同向，但會受股票市場流動性、槓桿、與公司融資節奏影響而波動。</li>
+            </ul>
+          </div>
+          <div class="divider"></div>
+          <div class="footer">
+            <div><strong>與 BTC 的關係（交作業可用）</strong></div>
+            <div>
+              Premium to NAV 本質上是「市場對公司 BTC 淨值的估值倍數/溢價」。
+              因為 NAV 由 BTC 價格主導，Premium 的變化常被用來觀察：
+              1) 投資人是否願意用更高估值買到「BTC 暴露 + 槓桿/增持選擇權」，
+              2) 風險偏好與資金流是否在 BTC 現貨/鏈上之外，轉向股票側的 DAT 標的。
+            </div>
+            <div style="margin-top:8px" class="muted">
+              資料來源：CoinGecko（BTC/USD 日線）、Stooq（MSTR.US 日線）、BuyBitcoinWorldwide（MSTR BTC holdings purchase history）。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const fmtPct = (x) => (x === null || x === undefined) ? "—" : `${x.toFixed(2)}%`;
+      const fmtNum = (x) => (x === null || x === undefined) ? "—" : x.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      const fmtPp = (x) => (x === null || x === undefined) ? "—" : `${x.toFixed(2)} pp`;
+
+      let chart;
+
+      async function load() {
+        const symbol = document.getElementById("symbol").value.trim() || "mstr.us";
+        const days = Number(document.getElementById("days").value || {{ default_days }});
+        const shares = Number(document.getElementById("shares").value || {{ shares_outstanding }});
+
+        const res = await fetch(`/api/premium-to-nav?symbol=${encodeURIComponent(symbol)}&days=${encodeURIComponent(days)}&shares_outstanding=${encodeURIComponent(shares)}`);
+        const data = await res.json();
+
+        const series = data.series || [];
+        if (series.length === 0) {
+          alert("沒有取到資料（可能是來源暫時擋請求或無法解析）。稍後重試。");
+          return;
+        }
+
+        // Update KPIs
+        const s = data.summary || {};
+        const latest = s.latest;
+        document.getElementById("kLatest").textContent = latest ? `${fmtPct(latest.premium_pct)} (${latest.date})` : "—";
+        document.getElementById("k30d").textContent = fmtPp(s.delta_30d_pp);
+        document.getElementById("kMinMax").textContent = (s.min && s.max)
+          ? `${fmtPct(s.min.premium_pct)} / ${fmtPct(s.max.premium_pct)}`
+          : "—";
+        document.getElementById("kRange").textContent = `${series[0].date} → ${series[series.length - 1].date}`;
+        document.getElementById("btcNow").textContent = latest ? `$${fmtNum(latest.btc_usd)}` : "—";
+
+        // Simple rule-based "summary" line (placeholder for LLM)
+        const last = latest ? latest.premium_pct : null;
+        const delta30 = s.delta_30d_pp;
+        let tone = "中性";
+        if (last !== null) {
+          if (last > 50) tone = "溢價偏高";
+          if (last < 0) tone = "折價";
+        }
+        let momentum = "平穩";
+        if (delta30 !== null) {
+          if (delta30 > 10) momentum = "快速上升";
+          if (delta30 < -10) momentum = "快速下降";
+        }
+        const insight = `目前 Premium：${fmtPct(last)}（${tone}），近 30 天 ${momentum}（${fmtPp(delta30)}）。`;
+        const insightNode = document.createElement("div");
+        insightNode.className = "muted";
+        insightNode.style.marginTop = "10px";
+        insightNode.textContent = insight + ` shares 假設：${shares.toLocaleString()}（要更準可改環境變數 MSTR_SHARES_OUTSTANDING）。`;
+        const insights = document.getElementById("insights");
+        const existing = insights.querySelector(".muted:last-child");
+        if (existing) existing.remove();
+        insights.appendChild(insightNode);
+
+        // Plot
+        const labels = series.map(p => p.date);
+        const premiums = series.map(p => p.premium_pct);
+
+        const ctx = document.getElementById("chart");
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [{
+              label: "Premium to NAV (%)",
+              data: premiums,
+              borderColor: "rgba(124,92,255,1)",
+              backgroundColor: "rgba(124,92,255,0.15)",
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.15,
+              fill: true,
+            }]
+          },
+          options: {
+            responsive: true,
+            interaction: { mode: "index", intersect: false },
+            scales: {
+              x: { ticks: { maxTicksLimit: 8, color: "rgba(169,178,216,0.9)" }, grid: { color: "rgba(255,255,255,0.06)" } },
+              y: { ticks: { callback: (v) => v + "%", color: "rgba(169,178,216,0.9)" }, grid: { color: "rgba(255,255,255,0.06)" } }
+            },
+            plugins: {
+              legend: { labels: { color: "rgba(232,236,255,0.95)" } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => ` Premium: ${ctx.parsed.y.toFixed(2)}%`,
+                }
+              }
+            }
+          }
+        });
+      }
+
+      document.getElementById("reload").addEventListener("click", () => load().catch(e => { console.error(e); alert("載入失敗，請看 console。"); }));
+      load().catch(e => { console.error(e); });
+    </script>
+  </body>
+</html>
