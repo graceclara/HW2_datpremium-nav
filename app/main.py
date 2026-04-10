@@ -43,6 +43,9 @@ async def premium_to_nav(
         btc = await fetch_btc_usd_daily(days)
         mstr = await fetch_alpha_vantage_daily_close(symbol)
         holdings = await fetch_mstr_btc_holdings_history()
+        if not holdings:
+    from app.services.sources import HoldingPoint
+    holdings = [HoldingPoint(d=btc[0].d, btc_total=766970.0)]
     except RuntimeError as e:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
