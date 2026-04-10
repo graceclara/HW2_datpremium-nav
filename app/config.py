@@ -13,6 +13,8 @@ def _int_env(name: str, default: int) -> int:
 
 MSTR_SHARES_OUTSTANDING = _int_env("MSTR_SHARES_OUTSTANDING", 17_500_000)
 ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
 
 # Data sources
 COINGECKO_BTC_DAILY_URL = (
@@ -27,3 +29,4 @@ MSTR_PURCHASE_HISTORY_URL = "https://buybitcoinworldwide.com/microstrategy-stati
 
 # Default range
 DEFAULT_DAYS = _int_env("DEFAULT_DAYS", 365)
+
