@@ -56,36 +56,30 @@ def _normalize_equity_symbol(symbol: str) -> str:
 
 async def fetch_alpha_vantage_daily_close(symbol: str) -> list[PricePoint]:
     """
-    Fetch daily close prices via AlphaVantage.
-    Requires env `ALPHAVANTAGE_API_KEY`.
+    Fetch daily close prices via Yahoo Finance chart API (free, no API key).
+    Kept function name unchanged so callers do not need updates.
     """
-    if not ALPHAVANTAGE_API_KEY:
-        raise RuntimeError("Missing ALPHAVANTAGE_API_KEY. Set it in your environment for equity price data.")
-
     sym = _normalize_equity_symbol(symbol)
-    url = ALPHAVANTAGE_DAILY_URL.format(symbol=sym, apikey=ALPHAVANTAGE_API_KEY)
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=2y&interval=1d"
+
     async with get_client() as client:
         r = await client.get(url)
         r.raise_for_status()
         payload = r.json()
 
-    # AlphaVantage error/limit messages
-    if "Error Message" in payload:
-        raise RuntimeError(payload["Error Message"])
-    if "Note" in payload:
-        raise RuntimeError(payload["Note"])
-    if "Information" in payload:
-        raise RuntimeError(payload["Information"])
+    result = (payload.get("chart", {}).get("result") or [None])[0]
+    if not result:
+        return []
 
-    ts = payload.get("Time Series (Daily)", {})
+    timestamps = result.get("timestamp") or []
+    closes = (((result.get("indicators") or {}).get("quote") or [{}])[0].get("close") or [])
+
     out: list[PricePoint] = []
-    for k, v in ts.items():
-        try:
-            d = date_parser.parse(k).date()
-            close = float(v.get("4. close"))
-        except Exception:
+    for ts, close in zip(timestamps, closes):
+        if close is None:
             continue
-        out.append(PricePoint(d=d, close=close))
+        d = datetime.fromtimestamp(ts, tz=timezone.utc).date()
+        out.append(PricePoint(d=d, close=float(close)))
 
     out.sort(key=lambda p: p.d)
     return out
