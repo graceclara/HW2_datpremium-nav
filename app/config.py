@@ -30,3 +30,4 @@ MSTR_PURCHASE_HISTORY_URL = "https://buybitcoinworldwide.com/microstrategy-stati
 # Default range
 DEFAULT_DAYS = _int_env("DEFAULT_DAYS", 365)
 
+
