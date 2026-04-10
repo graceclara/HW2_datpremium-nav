@@ -72,10 +72,10 @@ async def fetch_alpha_vantage_daily_close(symbol: str) -> list[PricePoint]:
     # AlphaVantage error/limit messages
     if "Error Message" in payload:
         raise RuntimeError(payload["Error Message"])
-if "Note" in payload:
-    raise RuntimeError(payload["Note"])
-if "Information" in payload:
-    raise RuntimeError(payload["Information"])
+    if "Note" in payload:
+        raise RuntimeError(payload["Note"])
+    if "Information" in payload:
+        raise RuntimeError(payload["Information"])
 
     ts = payload.get("Time Series (Daily)", {})
     out: list[PricePoint] = []
