@@ -67,16 +67,17 @@
           </div>
           <div class="divider"></div>
           <div class="insights" id="insights">
-            <div class="muted">AI 摘要（先用規則版，可擴充成 LLM）：</div>
+            <div class="muted">AI 摘要：</div>
             <ul>
               <li>當 Premium 上升：市場可能把 MSTR 當作<strong>高 Beta BTC 代理</strong>，並為其融資/增持能力定價。</li>
               <li>當 Premium 下滑或轉負：可能反映<strong>風險偏好下降</strong>、稀釋疑慮、或股票相對 BTC 轉弱。</li>
               <li>Premium 往往與 BTC 同向，但會受股票市場流動性、槓桿、與公司融資節奏影響而波動。</li>
             </ul>
+            <div class="muted" id="aiSummaryText" style="margin-top:10px"></div>
           </div>
           <div class="divider"></div>
           <div class="footer">
-            <div><strong>與 BTC 的關係（交作業可用）</strong></div>
+            <div><strong>與 BTC 的關係</strong></div>
             <div>
               Premium to NAV 本質上是「市場對公司 BTC 淨值的估值倍數/溢價」。
               因為 NAV 由 BTC 價格主導，Premium 的變化常被用來觀察：
@@ -123,28 +124,8 @@
         document.getElementById("kRange").textContent = `${series[0].date} → ${series[series.length - 1].date}`;
         document.getElementById("btcNow").textContent = latest ? `$${fmtNum(latest.btc_usd)}` : "—";
 
-        // Simple rule-based "summary" line (placeholder for LLM)
-        const last = latest ? latest.premium_pct : null;
-        const delta30 = s.delta_30d_pp;
-        let tone = "中性";
-        if (last !== null) {
-          if (last > 50) tone = "溢價偏高";
-          if (last < 0) tone = "折價";
-        }
-        let momentum = "平穩";
-        if (delta30 !== null) {
-          if (delta30 > 10) momentum = "快速上升";
-          if (delta30 < -10) momentum = "快速下降";
-        }
-        const insight = `目前 Premium：${fmtPct(last)}（${tone}），近 30 天 ${momentum}（${fmtPp(delta30)}）。`;
-        const insightNode = document.createElement("div");
-        insightNode.className = "muted";
-        insightNode.style.marginTop = "10px";
-        insightNode.textContent = insight + ` shares 假設：${shares.toLocaleString()}（要更準可改環境變數 MSTR_SHARES_OUTSTANDING）。`;
-        const insights = document.getElementById("insights");
-        const existing = insights.querySelector(".muted:last-child");
-        if (existing) existing.remove();
-        insights.appendChild(insightNode);
+        const aiText = data.ai_summary || "目前沒有可用的 AI 摘要。";
+        document.getElementById("aiSummaryText").textContent = aiText;
 
         // Plot
         const labels = series.map(p => p.date);
