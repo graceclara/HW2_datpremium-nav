@@ -31,24 +31,50 @@ class HoldingPoint:
 
 
 async def fetch_btc_usd_daily(days: int) -> list[PricePoint]:
+    """
+    Primary: CoinGecko daily BTC/USD
+    Fallback: Yahoo Finance BTC-USD daily
+    """
     url = COINGECKO_BTC_DAILY_URL.format(days=days)
-    async with get_client() as client:
-        r = await client.get(url)
-        r.raise_for_status()
-        payload = r.json()
+    try:
+        async with get_client() as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            payload = r.json()
 
-    # CoinGecko: prices = [[ms_since_epoch, price], ...]
-    out: dict[date, float] = {}
-    for ms, price in payload.get("prices", []):
-        dt = datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc).date()
-        out[dt] = float(price)
+        out: dict[date, float] = {}
+        for ms, price in payload.get("prices", []):
+            dt = datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc).date()
+            out[dt] = float(price)
 
-    return [PricePoint(d=k, close=v) for k, v in sorted(out.items(), key=lambda kv: kv[0])]
+        return [PricePoint(d=k, close=v) for k, v in sorted(out.items(), key=lambda kv: kv[0])]
+    except Exception:
+        yurl = "https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD?range=2y&interval=1d"
+        async with get_client() as client:
+            r = await client.get(yurl)
+            r.raise_for_status()
+            payload = r.json()
+
+        result = (payload.get("chart", {}).get("result") or [None])[0]
+        if not result:
+            return []
+
+        timestamps = result.get("timestamp") or []
+        closes = (((result.get("indicators") or {}).get("quote") or [{}])[0].get("close") or [])
+
+        out: list[PricePoint] = []
+        for ts, close in zip(timestamps, closes):
+            if close is None:
+                continue
+            d = datetime.fromtimestamp(ts, tz=timezone.utc).date()
+            out.append(PricePoint(d=d, close=float(close)))
+
+        out.sort(key=lambda p: p.d)
+        return out
 
 
 def _normalize_equity_symbol(symbol: str) -> str:
     s = symbol.strip().upper()
-    # accept common variants from UI like "mstr.us"
     if s.endswith(".US"):
         s = s[:-3]
     return s
@@ -141,6 +167,5 @@ async def fetch_mstr_btc_holdings_history() -> list[HoldingPoint]:
             continue
         points[hp.d] = hp
 
-    # Normalize: keep one point per date (last one wins), sort ascending
     out = sorted(points.values(), key=lambda p: p.d)
     return out
