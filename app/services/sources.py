@@ -71,7 +71,7 @@ async def fetch_alpha_vantage_daily_close(symbol: str) -> list[PricePoint]:
 
     # AlphaVantage error/limit messages
     if "Error Message" in payload:
-    raise RuntimeError(payload["Error Message"])
+        raise RuntimeError(payload["Error Message"])
 if "Note" in payload:
     raise RuntimeError(payload["Note"])
 if "Information" in payload:
