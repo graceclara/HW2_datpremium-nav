@@ -151,4 +151,3 @@ async def premium_to_nav(
         {"meta": response_payload["meta"], "summary": response_payload["summary"]}
     )
     return response_payload
-
